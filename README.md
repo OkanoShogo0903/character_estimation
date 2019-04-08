@@ -1,0 +1,2 @@
+# character_estimation
+OpenPoseから得られた姿勢から、キャラクターの姿勢推定を行う
