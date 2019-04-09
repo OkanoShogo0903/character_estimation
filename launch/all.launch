@@ -1,0 +1,18 @@
+<launch>
+
+  <node pkg="character_estimation" name="character_estimation" type="main.py" output="screen">
+      <param name="GUI" value="1" type="bool"/>
+      <param name="dataset_url" value="/pose_dataset" type="string"/>
+  </node>
+
+  <!--
+  <node pkg="camera1394" type="camera1394_node" name="camera1394_node" >
+    <param name="guid"            value="00b09d01009b30ce" />
+    <param name="auto_brightness" value="3" />
+    <param name="brightness"      value="256.0" />
+  </node>
+  -->
+
+</launch>
+
+
