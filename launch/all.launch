@@ -1,8 +1,13 @@
 <launch>
 
+  <node pkg="ros_openpose_joint_converter" name="ros_openpose_joint_converter" type="main.py" output="screen">
+  </node>
+
   <node pkg="character_estimation" name="character_estimation" type="main.py" output="screen">
-      <param name="GUI" value="1" type="bool"/>
-      <param name="dataset_url" value="/pose_dataset" type="string"/>
+      <param name="gui" value="1" type="bool"/>
+      <param name="mode" value="create_dataset" type="string"/>
+      <param name="dataset_url" value="/home/demulab/pose_dataset" type="string"/>
+      <param name="dataset_filename" value="dataset.csv" type="string"/>
   </node>
 
   <!--

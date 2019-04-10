@@ -6,4 +6,6 @@ dataset urlをlaunchファイルで指定する。
 デフォルトはホームディレクトリ直下の/pose_dataset
 
 # TODO
-openpose_ros_msgs をCMakeListに突っ込む
+openposeで得られるのは18次元の関節位置なので、これを関節書くに変換する.
+欠損値の埋め方をどうするのか
+
