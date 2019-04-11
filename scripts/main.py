@@ -17,6 +17,17 @@ from std_msgs.msg import Int32MultiArray
 from openpose_ros_msgs.msg import Persons
 from ros_openpose_joint_converter.msg import Joints
 
+from sklearn.ensemble import RandomForestClassifier as classifier
+
+CHARACTER_LABEL = [
+        "Leone      Abbacchio",
+        "Narancia   Ghirga",
+        "Bruno      Bucciarati",
+        "Giorno     Giovanna",
+        "Guido      Mista",
+        "Pannacotta Fugo",
+        ]
+
 # [ClassDefine]-------------------------->
 class CharacterEstimatate():
     ''' 
@@ -27,6 +38,8 @@ class CharacterEstimatate():
         # ROS Params ----->>>
         base = rospy.get_namespace() + rospy.get_name()
         self.MODE = rospy.get_param(base + '/mode', "create_dataset")
+        self.IS_TEST = rospy.get_param(base + '/is_test')
+        print(self.IS_TEST)
         self.DATASET_URL = rospy.get_param(base + '/dataset_url')
         self.DATASET_FILENAME = rospy.get_param(base + '/dataset_filename')
 
@@ -34,7 +47,7 @@ class CharacterEstimatate():
         # ROS Subscriber ----->>>
         self.joint_angle = rospy.Subscriber('/joint_angle', Joints, self.jointCB)
         # ROS Publisher ------>>>
-        #self.joint_angle = rospy.Publisher('/joint_angle', Int32MultiArray, queue_size=1)
+        self.pose_label = rospy.Publisher('/pose_label', Int32MultiArray, queue_size=1)
         # Set rospy to execute a shutdown function when exiting --->
         rospy.on_shutdown(self.shutdown)
 
@@ -82,9 +95,10 @@ class CharacterEstimatate():
         if self.MODE == "create_dataset":
             self.createDataset(msg)
         elif self.MODE == "estimate":
-            pass
+            labels = self.detect(msg)
+            self.outputter(labels)
         else:
-            print("error")
+            rospy.loginfo("MODE ERROR")
         
 
     def createDataset(self, msg):
@@ -106,15 +120,52 @@ class CharacterEstimatate():
         print(self.df)
 
 
-    def outputter(self):
+    def detect(self, msg):
+        # Learn in first call --->
+        if self.isFirstCall == False:
+            print("Learnning --->>>")
+            self.isFirstCall = True
+
+            X = self.df.loc[:, 'R-mid-0':'L-bot-2']
+            y = self.df.loc[:, 'Label']
+            print(X.shape)
+            from sklearn.model_selection import train_test_split
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.3, random_state=0)
+
+            from sklearn.ensemble import RandomForestClassifier
+            print("X shape", X_train.shape)
+            print(type(X_train))
+            self.model = RandomForestClassifier(random_state=777)
+
+            self.model.fit(X_train, y_train)
+            #predict_y_train = self.model.predict(X_train)
+            #predict_y_test  = self.model.predict(X_test)
+   	    print('score_train: {}'.format(self.model.score(X_train, y_train)))
+            print('score_test : {}'.format(self.model.score(X_test, y_test)))
+        #self.IS_TEST
+
+        # Save model --->
+        # Estimate --->
+        labels = []
+        for person in msg.persons:
+            input_data = np.reshape(np.array(person.data), (1,16))
+            predict = self.model.predict(input_data)
+            print("Detect ---> ", CHARACTER_LABEL[int(predict)])
+            labels.append(predict)
+
+        return labels
+
+
+    def outputter(self, labels):
         pass
         
-
+        
 # [Main] ----------------------------------------->>>
 #if __name__ == '__main__':
 rospy.init_node('character_estimation')
+rospy.sleep(3)
 
-time.sleep(3.0)
 node = CharacterEstimatate()
 
 while not rospy.is_shutdown():
