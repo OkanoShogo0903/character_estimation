@@ -4,8 +4,13 @@ OpenPoseから得られた姿勢から、キャラクターの姿勢推定を行
 ![jojo](https://github.com/OkanoShogo0903/character_estimation/blob/master/etcs/jojo.jpg)
 
 ## Install
-dataset urlをlaunchファイルで指定する。
+dataset urlをlaunchファイルで指定する。  
 デフォルトはホームディレクトリ直下の/pose_dataset
+```xml
+      <param name="mode" value="estimate" type="string"/>
+      <param name="is_test" value="1" type="bool"/>
+      <param name="dataset_url" value="/home/demulab/pose_dataset" type="string"/>
+```
 
 ## How to use
 roslaunch character_estimation all.launch
