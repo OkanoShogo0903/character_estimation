@@ -1,6 +1,8 @@
 # JOJO立ち認識
 OpenPoseから得られた姿勢から、キャラクターの姿勢推定を行う
 
+[!jojo](https://github.com/OkanoShogo0903/character_estimation/blob/master/etcs/jojo.jpg)
+
 ## Install
 dataset urlをlaunchファイルで指定する。
 デフォルトはホームディレクトリ直下の/pose_dataset
