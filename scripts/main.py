@@ -20,16 +20,23 @@ from std_msgs.msg import Int32MultiArray, Int32
 from sensor_msgs.msg import Image, CameraInfo
 
 from openpose_ros_msgs.msg import Persons
-from ros_openpose_joint_converter.msg import Joints
+from ros_openpose_joint_converter.msg import Group, Person
 
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-
-from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
-from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.naive_bayes import GaussianNB
 from xgboost import XGBClassifier
+
+from sklearn.model_selection import train_test_split, GridSearchCV
+#from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, GradientBoostingClassifier
+from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.externals.joblib import dump, load
+from sklearn.metrics import confusion_matrix, classification_report
+
+MODE = {
+        "CREATE_DATASET": 0, 
+        "TRAIN": 1, 
+        "PREDICT": 2,
+        }
 
 CHARACTER_NAME = [
         "Leone Abbacchio",
@@ -61,48 +68,58 @@ class CharacterEstimatate():
         # ROS Basic ----->>>
         self.bridge = CvBridge()
         base = rospy.get_namespace() + rospy.get_name()
-        self.MODE = rospy.get_param(base + '/mode', "create_dataset")
-        self.IS_TEST = rospy.get_param(base + '/is_test')
+        self.select_mode = rospy.get_param(base + '/mode') # 0:CreateDataset ,1:Train, 2:Predict
         self.DATASET_URL = rospy.get_param(base + '/dataset_url')
         self.DATASET_FILENAME = rospy.get_param(base + '/dataset_filename')
 
         self.PACKAGE_PATH = rospkg.RosPack().get_path('character_estimation')
-        # ROS Subscriber ----->>>
-        self.joint_sub = rospy.Subscriber('/joint_angle', Joints, self.jointCB)
-        self.pose_sub  = rospy.Subscriber('/openpose/pose', Persons, self.poseCB)
-        self.image_sub = rospy.Subscriber('/videofile/image_raw', Image, self.imageCB)
-        # ROS Publisher ------>>>
-        self.pose_label_pub = rospy.Publisher('/pose_label', Int32, queue_size=1)
-        self.image_pub = rospy.Publisher('/character_img', Image, queue_size=1)
-        # Set rospy to execute a shutdown function when exiting --->
-        rospy.on_shutdown(self.shutdown)
 
-        print("MODE ", self.MODE)
+        print("select_mode ", self.select_mode)
 
         # Other setting ------>>>
         self.img = None
         self.person_x, self.person_y = [], []
         self.HEAD_ID = 0
-        self.isFirstCall = False
-        self.labels = []
+        self.isRecording = False
+        #self.labels = []
         self.COLUMNS=[
-            'R-mid-0','R-mid-1','R-mid-2',
-            'L-mid-0','L-mid-1','L-mid-2',
-            'R-top-0','R-top-1',
-            'L-top-0','L-top-1',
-            'R-bot-0','R-bot-1','R-bot-2',
-            'L-bot-0','L-bot-1','L-bot-2',
+            'angle-R-mid-0', 'angle-R-mid-1', 'angle-R-mid-2',
+            'angle-L-mid-0', 'angle-L-mid-1', 'angle-L-mid-2',
+            'angle-R-top-0', 'angle-R-top-1',  
+            'angle-L-top-0', 'angle-L-top-1',  
+            'angle-R-bot-0', 'angle-R-bot-1', 'angle-R-bot-2',
+            'angle-L-bot-0', 'angle-L-bot-1', 'angle-L-bot-2',
+            'length-C-top-0',
+            'length-R-mid-0', 'length-R-mid-1', 'length-R-mid-2',
+            'length-L-mid-0', 'length-L-mid-1', 'length-L-mid-2',
+            'length-R-bot-0', 'length-R-bot-1', 'length-R-bot-2',
+            'length-L-bot-0', 'length-L-bot-1', 'length-L-bot-2',
+            'length-R-top-0', 'length-R-top-1', 
+            'length-L-top-0', 'length-L-top-1',  
             'Label']
 
         self.FLIP_COLUMNS=[
-            'L-mid-0','L-mid-1','L-mid-2',
-            'R-mid-0','R-mid-1','R-mid-2',
-            'L-top-0','L-top-1',
-            'R-top-0','R-top-1',
-            'L-bot-0','L-bot-1','L-bot-2',
-            'R-bot-0','R-bot-1','R-bot-2',
+            'angle-L-mid-0', 'angle-L-mid-1', 'angle-L-mid-2',
+            'angle-R-mid-0', 'angle-R-mid-1', 'angle-R-mid-2',
+            'angle-L-top-0', 'angle-L-top-1',  
+            'angle-R-top-0', 'angle-R-top-1',  
+            'angle-L-bot-0', 'angle-L-bot-1', 'angle-L-bot-2',
+            'angle-R-bot-0', 'angle-R-bot-1', 'angle-R-bot-2',
+            'length-C-top-0',
+            'length-R-mid-0', 'length-R-mid-1', 'length-R-mid-2',
+            'length-L-mid-0', 'length-L-mid-1', 'length-L-mid-2',
+            'length-R-bot-0', 'length-R-bot-1', 'length-R-bot-2',
+            'length-L-bot-0', 'length-L-bot-1', 'length-L-bot-2',
+            'length-R-top-0', 'length-R-top-1', 
+            'length-L-top-0', 'length-L-top-1',  
             'Label']
 
+        self.DROP_LIST=[
+            'angle-L-top-0', 'angle-L-top-1',  
+            'angle-R-top-0', 'angle-R-top-1',  
+            'length-R-top-0', 'length-R-top-1', 
+            'length-L-top-0', 'length-L-top-1',  
+            ]
         os.chdir(self.DATASET_URL)
         try:
             self.df = pd.read_csv( self.DATASET_FILENAME, names=self.COLUMNS)
@@ -112,6 +129,19 @@ class CharacterEstimatate():
             rospy.loginfo("Could not find csv file")
             rospy.loginfo("Create new csv file...")
 
+        # ROS Subscriber ----->>>
+        self.joint_sub = rospy.Subscriber('/joint_converter/group', Group, self.jointCB)
+        self.pose_sub  = rospy.Subscriber('/openpose/pose', Persons, self.poseCB)
+        #self.image_sub = rospy.Subscriber('/videofile/image_raw', Image, self.imageCB)
+        self.image_sub = rospy.Subscriber('/openpose/image_raw', Image, self.imageCB)
+        # ROS Publisher ------>>>
+        self.pose_label_pub = rospy.Publisher('/pose_label', Int32, queue_size=1)
+        self.image_pub = rospy.Publisher('/character_img', Image, queue_size=1)
+        # Set rospy to execute a shutdown function when exiting --->
+        rospy.on_shutdown(self.shutdown)
+        
+        # hoge
+        self.record_count = 0
 
     def shutdown(self):
         ''' 
@@ -119,7 +149,7 @@ class CharacterEstimatate():
         ''' 
         rospy.loginfo("Stopping the system...")
         # 
-        if self.MODE == "create_dataset":
+        if self.select_mode == MODE["CREATE_DATASET"]:
             rospy.loginfo("Save csv data")
             os.chdir(self.DATASET_URL)
             self.df.to_csv( self.DATASET_FILENAME, encoding="utf-8", header=False, index=False)
@@ -147,8 +177,6 @@ class CharacterEstimatate():
         # Image convert from ROS IMAGE format to OPENCV IMAGE format ----->
         try:
             self.img = self.bridge.imgmsg_to_cv2(msg, "rgb8")
-            #self.img = self.bridge.imgmsg_to_cv2(msg, msg.encoding)
-
         except CvBridgeError as e:
             print(e)
             return
@@ -158,11 +186,12 @@ class CharacterEstimatate():
         ''' 
         @param msg : it is joint angle from ros_openpose_joint_converter.
         ''' 
-        if self.MODE == "create_dataset":
+        if self.select_mode == MODE["CREATE_DATASET"]:
             self.createDataset(msg)
-        elif self.MODE == "estimate":
-            self.labels = self.detect(msg)
-            #if self.img != None:
+        elif self.select_mode == MODE["TRAIN"]:
+            pass
+        elif self.select_mode == MODE["PREDICT"]:
+            self.labels = self.predict(msg)
             self.outputter()
         else:
             rospy.loginfo("MODE ERROR")
@@ -170,62 +199,44 @@ class CharacterEstimatate():
 
     def createDataset(self, msg):
         ''' 
-        @dis 
+        @dis In first call, receive class label in keyboard.
         ''' 
         # Get data label --->
-        if self.isFirstCall == False:
+        if self.isRecording == False:
             print("Please enter the label --->>>")
             self.label = input()
-            self.isFirstCall = True
-        # Save dataset --->
-        for person in msg.persons:
-            data_raw = np.hstack((person.data, self.label))
-            tmp_se = pd.Series( data_raw, index=self.df.columns )
-            self.df = self.df.append( tmp_se, ignore_index=True )
+            print("Recording start after some second latter")
+            for _ in range(0,5): # Wait some second
+                print(".")
+                rospy.sleep(1.0)
+            self.isRecording = True
+        else:
+            # Save dataset --->
+            for p in msg.persons:
+                data_raw = np.hstack((p.angle.data, p.length.data, self.label))
+                tmp_se = pd.Series( data_raw, index=self.df.columns )
+                self.df = self.df.append( tmp_se, ignore_index=True )
+
+            # Count up
+            self.record_count += 1
+            if self.record_count % 100 == 0:
+                self.isRecording = False
 
 
-    def detect(self, msg):
-        # Train in first call --->
-        if self.isFirstCall == False:
-            print("Learnning --->>>")
-            self.isFirstCall = True
-
-            # Dataset --->
-            data = self.df
-            #data = self.dataAugmentation(data)
-            print("Dataset shape :", data)
-            data = self.df.drop(['R-top-0', 'R-top-1', 'L-top-0', 'L-top-1'], axis=1)
-            print("Dataset shape :", data)
-            y = data.loc[:, 'Label']
-            X = data.drop('Label', axis=1)
-            #X = argmentted_df.loc[:, 'R-mid-0':'L-bot-2']
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.3, random_state=0)
-
-            # Train --->
-            self.model = clfs[0]
-            self.model.fit(X_train, y_train)
-
-            # Evaluation --->
-   	    print('score_train : {}'.format(self.model.score(X_train, y_train)))
-            print('score_test  : {}'.format(self.model.score(X_test, y_test)))
-            #print('Accracy     : {}'.format(accuracy_score(X_test, y_test)))
-            #print('Precision   : {}'.format(precision_score(X_test, y_test)))
-            #print('Recall      : {}'.format(recall_score(X_test, y_test)))
-            #print('F-score     : {}'.format(f1_score(X_test, y_test)))
-
-        # Save model --->
-        # Estimate --->
+    def predict(self, msg):
         labels = []
-        for person in msg.persons:
-            data = person.data
-            data = np.reshape(np.array(data), (1,16))
+        model = load("model.pkl")
+        for p in msg.persons:
+            # Reshape input data --->
+            data = p.angle.data + p.length.data
+            data = np.reshape(np.array(data), (1,16+17))
             data = pd.DataFrame(data, columns=self.COLUMNS[:-1])
-            data = data.drop(['R-top-0', 'R-top-1', 'L-top-0', 'L-top-1'], axis=1)
+            data = data.drop(self.DROP_LIST, axis=1)
 
-            predict = self.model.predict(data)
-            print("Detect ---> ", CHARACTER_NAME[int(predict)])
+            # Predict --->
+            predict = model.predict(data)
             labels.append(predict)
+            print("Detected ---> ", CHARACTER_NAME[int(predict)])
 
             # Pose label publish --->
             label = Int32()
@@ -235,19 +246,84 @@ class CharacterEstimatate():
         return labels
 
 
+    def dataVisualize(self, df):
+        df.plot.scatter(x='L-top-1', y='Label', vmin=0, vmax=180)
+        plt.show()
+            #'L-top-0','',
+            #'R-bot-0','R-bot-1','R-bot-2',
+            #'L-bot-0','L-bot-1','L-bot-2',
+
+
     def dataAugmentation(self, df):
+        '''
+        Replace the columns
+        '''
         copy = df.copy()
         copy.columns = self.FLIP_COLUMNS
-        return pd.concat([df, copy])
+        return pd.concat([df, copy], sort=True)
 
 
     def outputter(self):
+        # Publish Image with label
         img = self.img
         for x, y, label in zip(self.person_x, self.person_y, self.labels):
             cv.putText(img, CHARACTER_NAME[int(label)], (x-50,y), cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,150), 2, cv.LINE_AA)
         msg = self.bridge.cv2_to_imgmsg(img, encoding="rgb8")
         self.image_pub.publish(msg)
         
+    def train(self):
+        print("Learnning --->>>")
+
+        # 1. Load dataset --->
+        data = self.df
+        #data = self.dataAugmentation(data)
+        #self.dataVisualize(data)
+        data = data.drop(self.DROP_LIST, axis=1)
+        print("Dataset (Augmentation):", data)
+        y = data.loc[:, 'Label']
+        X = data.drop('Label', axis=1)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.3, random_state=0)
+        y_train = np.ravel(y_train)
+        y_test  = np.ravel(y_test)
+
+        # 2. Train --->
+        #self.model = clfs[0]
+        diparameter = {
+                "n_estimators":[i for i in range(10,50,10)], 
+                "criterion":["gini","entropy"],
+                "max_depth":[i for i in range(1,6,1)],
+                "random_state":[123],
+                "class_weight":["balanced"],
+                }
+        licv = GridSearchCV(RandomForestClassifier(), param_grid=diparameter, cv=5, n_jobs=5, verbose=2)
+        licv.fit(X_train, y_train)
+        self.model = licv.best_estimator_
+        dump(self.model, "model.pkl", compress=True) # Save
+
+        # 3. evaluating the performance of the self.model
+        print('score_train : {}'.format(self.model.score(X_train, y_train)))
+        print('score_test  : {}'.format(self.model.score(X_test, y_test)))
+
+        for x, y in zip([X_train, X_test], [y_train, y_test]):
+            print("-"*50)
+            y_pred = self.model.predict(x)
+            print(classification_report(y, y_pred, target_names=CHARACTER_NAME))
+
+        # 4. printing parameters of the model
+        print(sorted(self.model.get_params(True).items()))
+         
+        # 5. printing importances of the model
+        #print(self.model.feature_importances_)
+        features = X_train.columns
+        importances = self.model.feature_importances_
+        indices = np.argsort(importances)
+        plt.figure(figsize=(6,6))
+        plt.barh(range(len(indices)), importances[indices], color='b', align='center')
+        plt.yticks(range(len(indices)), features[indices])
+        plt.savefig('feature_importances.png')
+        plt.show()
+
         
 # [Main] ----------------------------------------->>>
 #if __name__ == '__main__':
@@ -255,8 +331,8 @@ rospy.init_node('character_estimation')
 rospy.sleep(2)
 
 node = CharacterEstimatate()
-rospy.sleep(2)
-
-while not rospy.is_shutdown():
-    rospy.sleep(0.1)
-            
+if node.select_mode == MODE["TRAIN"]:
+    node.train()
+else:
+    while not rospy.is_shutdown():
+        rospy.sleep(0.1)

@@ -1,10 +1,11 @@
 <?xml version="1.0"?>
 <launch>
-
-  <include file="$(find ros_openpose_joint_converter)/launch/all.launch">
+  <include file="$(find ros_openpose_joint_converter)/launch/single.launch">
   </include>
 
+  <arg name="mode"/>
   <include file="$(find character_estimation)/launch/single.launch">
+      <arg name="mode" value="$(arg mode)"/>
   </include>
 
   <include file="$(find openpose_ros_node)/launch/videostream.launch">
