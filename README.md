@@ -1,16 +1,24 @@
 # JOJO立ち認識
-OpenPoseから得られた姿勢から、キャラクターの姿勢推定を行う
+OpenPoseで得られた姿勢から、キャラクターの推定を行う
 ![image](https://user-images.githubusercontent.com/25472671/56340597-543df200-61ed-11e9-96c7-532d0274f4ec.png)
 
 ![jojo](https://github.com/OkanoShogo0903/character_estimation/blob/master/etcs/jojo.jpg)
 
 ## Install
-dataset urlをlaunchファイルで指定する。  
-デフォルトはホームディレクトリ直下の/pose_dataset
+dataset url等をlaunchファイルで指定する。 
+
 ```xml
-      <param name="mode" value="estimate" type="string"/>
-      <param name="is_test" value="1" type="bool"/>
-      <param name="dataset_url" value="/home/demulab/pose_dataset" type="string"/>
+<launch>
+  <arg name="mode" doc="MODE 0:CreateDataset ,1:Train ,2:Predict"/>
+  <node pkg="character_estimation" name="character_estimation" type="main.py" output="screen">
+    <param name="gui" value="1" type="bool"/>
+    <param name="mode" value="$(arg mode)" type="int"/>
+    <param name="dataset_url" value="/home/demulab/pose_dataset" type="string"/>
+    <param name="dataset_filename" value="dataset.csv" type="string"/>
+    <param name="model_url" value="/home/demulab/catkin_ws/src/character_estimation/" type="string"/>
+    <param name="picture_url" value="/home/demulab/catkin_ws/src/character_estimation/etcs/" type="string"/>
+  </node>
+</launch>
 ```
 
 ## How to use
