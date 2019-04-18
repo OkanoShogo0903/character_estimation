@@ -6,6 +6,8 @@
     <param name="mode" value="$(arg mode)" type="int"/>
     <param name="dataset_url" value="/home/demulab/pose_dataset" type="string"/>
     <param name="dataset_filename" value="dataset.csv" type="string"/>
+    <param name="model_url" value="/home/demulab/catkin_ws/src/character_estimation/" type="string"/>
+    <param name="picture_url" value="/home/demulab/catkin_ws/src/character_estimation/etcs/" type="string"/>
   </node>
 
 </launch>

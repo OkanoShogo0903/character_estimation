@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 
 # [Import]------------------------------->
-import pil_image
-
 import os
 import cv2 as cv
 import sys
@@ -45,11 +43,17 @@ CHARACTER_NAME = [
         "kira1",
         "kira2"
         ]
-CHARACTER_PICTURE = [
-            {"filename":"0.png", "x":-100, "y":0, "size":0.2},
-            {"filename":"1.png", "x":-100, "y":0, "size":0.6},
-            {"filename":"1.png", "x":-100, "y":0, "size":0.6},
+CHARACTER = [
+            {"filename":"0.png", "x":0, "y":0},
+            {"filename":"1.png", "x":0, "y":0},
+            {"filename":"2.png", "x":0, "y":0},
         ]
+CHARACTER_PICTURE = [
+        "Dio",
+        "Kira1",
+        "Kira2",
+        ]
+
         #"Leone Abbacchio",
         #"Narancia Ghirga",
         #"Bruno Bucciarati",
@@ -81,8 +85,6 @@ class CharacterEstimatate():
         self.select_mode = rospy.get_param(base + '/mode') # 0:CreateDataset ,1:Train, 2:Predict
         self.DATASET_URL = rospy.get_param(base + '/dataset_url')
         self.DATASET_FILENAME = rospy.get_param(base + '/dataset_filename')
-        self.MODEL_URL = rospy.get_param(base + '/model_url')
-        self.PICTURE_URL = rospy.get_param(base + '/picture_url')
 
         self.PACKAGE_PATH = rospkg.RosPack().get_path('character_estimation')
 
@@ -132,6 +134,7 @@ class CharacterEstimatate():
             'length-R-top-0', 'length-R-top-1', 
             'length-L-top-0', 'length-L-top-1',  
             ]
+        os.chdir(self.DATASET_URL)
         try:
             self.df = pd.read_csv( self.DATASET_FILENAME, names=self.COLUMNS)
             rospy.loginfo("Load csv file")
@@ -222,7 +225,7 @@ class CharacterEstimatate():
                 rospy.sleep(1.0)
             self.isRecording = True
         else:
-            # Append to dataset --->
+            # Save dataset --->
             for p in msg.persons:
                 data_raw = np.hstack((p.angle.data, p.length.data, self.label))
                 tmp_se = pd.Series( data_raw, index=self.df.columns )
@@ -235,11 +238,8 @@ class CharacterEstimatate():
 
 
     def predict(self, msg):
-        # Load model
-        os.chdir(self.MODEL_URL)
-        model = load("model.pkl")
-
         labels = []
+        model = load("model.pkl")
         for p in msg.persons:
             # Reshape input data --->
             data = p.angle.data + p.length.data
@@ -250,7 +250,7 @@ class CharacterEstimatate():
             # Predict --->
             predict = model.predict(data)
             labels.append(predict)
-            print("Detected ---> ", CHARACTER_NAME[int(predict)])
+            print("Detected ---> ", CHARACTER[int(predict)])
 
             # Pose label publish --->
             label = Int32()
@@ -278,58 +278,11 @@ class CharacterEstimatate():
 
 
     def outputter(self):
-        from PIL import Image, ImageDraw, ImageFilter
-
         # Publish Image with label
         img = self.img
         for x, y, label in zip(self.person_x, self.person_y, self.labels):
-            # Draw character image --->
-            os.chdir(self.PICTURE_URL)
-            char = CHARACTER_PICTURE[int(label)]
-
-            # Load and resize
-            src = pil_image.cv2pil(img)
-            forward = Image.open( char["filename"])
-            h, w = forward.size
-            forward = forward.resize((int(h*char["size"]), int(w*char["size"])))
-
-            # For convert
-            src = src.convert('RGBA')
-
-            # Paste
-            c = Image.new('RGBA', src.size, (255, 255, 255, 0))
-            #src.paste(forward, ( char["x"], char["y"]))
-            #c.paste(forward, ( char["x"] + x, char["y"] + y), forward)
-            c.paste(forward, ( char["x"] + x - int(char["size"]*h/2), char["y"] + y - int(char["size"]*w/2)), forward)
-
-            result = Image.alpha_composite(src, c)
-            result.save('tmp.jpg', quality=95)
-            img = cv.imread('tmp.jpg')
-
-            """
-            w, h = forward.shape[:2]
-            size = (h/2, w/2)
-            #forward = cv.resize(forward, size)
-            #forward = cv.resize(forward, (640, 480))
-
-            img[0:h, 0:w] = forward
-            """
-            """
-            forward = cv.imread( CHARACTER_PICTURE[int(label)]["filename"], -1)
-            w, h = forward.shape[:2]
-            mask = forward[:,:,3]  # アルファチャンネルだけ抜き出す。
-            mask = cv.cvtColor(mask, cv.COLOR_GRAY2BGR)  # 3色分に増やす。
-            mask = mask / 255.0  # 0-255だと使い勝手が悪いので、0.0-1.0に変更。
-
-            forward = forward[:,:,:3]  # アルファチャンネルは取り出しちゃったのでもういらない。
-
-            #img[0:h, 0:w] *= 1 - mask  # 透過率に応じて元の画像を暗くする。
-            g = forward * mask
-            g = np.array(g, dtype="u8")
-            print(type(g))
-            img[0:h, 0:w] += g  # 貼り付ける方の画像に透過率をかけて加算。
-            """
-
+            # Draw character image
+            cv.
             # Write label name to img
             cv.putText(img, CHARACTER_NAME[int(label)], (x-50,y), cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,150), 2, cv.LINE_AA)
         msg = self.bridge.cv2_to_imgmsg(img, encoding="rgb8")
@@ -337,7 +290,6 @@ class CharacterEstimatate():
         
     def train(self):
         print("Learnning --->>>")
-        os.chdir(self.MODEL_URL)
 
         # 1. Load dataset --->
         data = self.df
@@ -364,7 +316,6 @@ class CharacterEstimatate():
         licv = GridSearchCV(RandomForestClassifier(), param_grid=diparameter, cv=5, n_jobs=5, verbose=2)
         licv.fit(X_train, y_train)
         self.model = licv.best_estimator_
-
         dump(self.model, "model.pkl", compress=True) # Save
 
         # 3. evaluating the performance of the self.model
@@ -387,7 +338,6 @@ class CharacterEstimatate():
         plt.figure(figsize=(6,6))
         plt.barh(range(len(indices)), importances[indices], color='b', align='center')
         plt.yticks(range(len(indices)), features[indices])
-        os.chdir(self.MODEL_URL)
         plt.savefig('feature_importances.png')
         plt.show()
 
