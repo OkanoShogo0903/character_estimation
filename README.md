@@ -1,5 +1,5 @@
 # JOJO立ち認識
-OpenPoseから得られた姿勢から、キャラクターの姿勢推定を行う
+OpenPoseで得られた姿勢から、キャラクターの推定を行う
 ![image](https://user-images.githubusercontent.com/25472671/56340597-543df200-61ed-11e9-96c7-532d0274f4ec.png)
 
 ![jojo](https://github.com/OkanoShogo0903/character_estimation/blob/master/etcs/jojo.jpg)
