@@ -1,9 +1,12 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# [Import]------------------------------->
+# [My Lib]------------------------------->
 import pil_image
+import colum as col
+import character as ch 
 
+# [Import]------------------------------->
 import os
 import cv2 as cv
 import sys
@@ -34,28 +37,12 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.externals.joblib import dump, load
 from sklearn.metrics import confusion_matrix, classification_report
 
+# [Define]------------------------------->
 MODE = {
         "CREATE_DATASET": 0, 
         "TRAIN": 1, 
         "PREDICT": 2,
         }
-
-CHARACTER_NAME = [
-        "Dio",
-        "kira1",
-        "kira2"
-        ]
-CHARACTER_PICTURE = [
-            {"filename":"0.png", "x":-100, "y":0, "size":0.2},
-            {"filename":"1.png", "x":-100, "y":0, "size":0.6},
-            {"filename":"1.png", "x":-100, "y":0, "size":0.6},
-        ]
-        #"Leone Abbacchio",
-        #"Narancia Ghirga",
-        #"Bruno Bucciarati",
-        #"Giorno Giovanna",
-        #"Guido Mista",
-        #"Pannacotta Fugo",
 
 clfs = [RandomForestClassifier(n_estimators=100, n_jobs=-1, criterion='gini'),
         ExtraTreesClassifier(n_estimators=100, n_jobs=-1, criterion='gini'),
@@ -75,14 +62,15 @@ class CharacterEstimatate():
     It detect character label.
     '''
     def __init__(self):
-        # ROS Basic ----->>>
+        # ROS Basic setting ----->>>
         self.bridge = CvBridge()
         base = rospy.get_namespace() + rospy.get_name()
-        self.select_mode = rospy.get_param(base + '/mode') # 0:CreateDataset ,1:Train, 2:Predict
-        self.DATASET_URL = rospy.get_param(base + '/dataset_url')
+        self.select_mode    = rospy.get_param(base + '/mode') # 0:CreateDataset ,1:Train, 2:Predict
+        self.IS_FLIP_ENABLE = rospy.get_param(base + '/flip_enable')
+        self.DATASET_URL    = rospy.get_param(base + '/dataset_url')
         self.DATASET_FILENAME = rospy.get_param(base + '/dataset_filename')
-        self.MODEL_URL = rospy.get_param(base + '/model_url')
-        self.PICTURE_URL = rospy.get_param(base + '/picture_url')
+        self.MODEL_URL      = rospy.get_param(base + '/model_url')
+        self.PICTURE_URL    = rospy.get_param(base + '/picture_url')
 
         self.PACKAGE_PATH = rospkg.RosPack().get_path('character_estimation')
 
@@ -92,51 +80,15 @@ class CharacterEstimatate():
         self.img = None
         self.person_x, self.person_y = [], []
         self.HEAD_ID = 0
+        self.MODEL_NAME = "model.pkl"
         self.isRecording = False
-        #self.labels = []
-        self.COLUMNS=[
-            'angle-R-mid-0', 'angle-R-mid-1', 'angle-R-mid-2',
-            'angle-L-mid-0', 'angle-L-mid-1', 'angle-L-mid-2',
-            'angle-R-top-0', 'angle-R-top-1',  
-            'angle-L-top-0', 'angle-L-top-1',  
-            'angle-R-bot-0', 'angle-R-bot-1', 'angle-R-bot-2',
-            'angle-L-bot-0', 'angle-L-bot-1', 'angle-L-bot-2',
-            'length-C-top-0',
-            'length-R-mid-0', 'length-R-mid-1', 'length-R-mid-2',
-            'length-L-mid-0', 'length-L-mid-1', 'length-L-mid-2',
-            'length-R-bot-0', 'length-R-bot-1', 'length-R-bot-2',
-            'length-L-bot-0', 'length-L-bot-1', 'length-L-bot-2',
-            'length-R-top-0', 'length-R-top-1', 
-            'length-L-top-0', 'length-L-top-1',  
-            'Label']
 
-        self.FLIP_COLUMNS=[
-            'angle-L-mid-0', 'angle-L-mid-1', 'angle-L-mid-2',
-            'angle-R-mid-0', 'angle-R-mid-1', 'angle-R-mid-2',
-            'angle-L-top-0', 'angle-L-top-1',  
-            'angle-R-top-0', 'angle-R-top-1',  
-            'angle-L-bot-0', 'angle-L-bot-1', 'angle-L-bot-2',
-            'angle-R-bot-0', 'angle-R-bot-1', 'angle-R-bot-2',
-            'length-C-top-0',
-            'length-R-mid-0', 'length-R-mid-1', 'length-R-mid-2',
-            'length-L-mid-0', 'length-L-mid-1', 'length-L-mid-2',
-            'length-R-bot-0', 'length-R-bot-1', 'length-R-bot-2',
-            'length-L-bot-0', 'length-L-bot-1', 'length-L-bot-2',
-            'length-R-top-0', 'length-R-top-1', 
-            'length-L-top-0', 'length-L-top-1',  
-            'Label']
-
-        self.DROP_LIST=[
-            'angle-L-top-0', 'angle-L-top-1',  
-            'angle-R-top-0', 'angle-R-top-1',  
-            'length-R-top-0', 'length-R-top-1', 
-            'length-L-top-0', 'length-L-top-1',  
-            ]
+        # Dataset load ----->>>
         try:
-            self.df = pd.read_csv( self.DATASET_FILENAME, names=self.COLUMNS)
+            self.df = pd.read_csv( self.DATASET_FILENAME, names=col.COLUMNS)
             rospy.loginfo("Load csv file")
         except IOError:
-            self.df = pd.DataFrame( columns=self.COLUMNS)
+            self.df = pd.DataFrame( columns=col.COLUMNS)
             rospy.loginfo("Could not find csv file")
             rospy.loginfo("Create new csv file...")
 
@@ -151,12 +103,12 @@ class CharacterEstimatate():
         # Set rospy to execute a shutdown function when exiting --->
         rospy.on_shutdown(self.shutdown)
         
-        # hoge
+        # For create create
         self.record_count = 0
 
     def shutdown(self):
         ''' 
-        This function always call in shutdown
+        @dis This function always call in shutdown
         ''' 
         rospy.loginfo("Stopping the system...")
         # 
@@ -170,12 +122,13 @@ class CharacterEstimatate():
 
     def poseCB(self, msg):
         ''' 
-        Update pose data.
+        @dis This function receive ros-openpose msg.
+             We want to only use head coordinate.
         ''' 
-        #self.person_x.clear()
-        #self.person_y.clear()
+        # Delete old data.
         del self.person_x[:]
         del self.person_y[:]
+        # Set new data(head coordinate).
         for person in msg.persons:
             self.person_x.append(person.body_part[self.HEAD_ID].x)
             self.person_y.append(person.body_part[self.HEAD_ID].y)
@@ -202,8 +155,8 @@ class CharacterEstimatate():
         elif self.select_mode == MODE["TRAIN"]:
             pass
         elif self.select_mode == MODE["PREDICT"]:
-            self.labels = self.predict(msg)
-            self.outputter()
+            self.predict(msg)
+            self.publishCharacterImage()
         else:
             rospy.loginfo("MODE ERROR")
         
@@ -237,47 +190,47 @@ class CharacterEstimatate():
     def predict(self, msg):
         # Load model
         os.chdir(self.MODEL_URL)
-        model = load("model.pkl")
+        model = load(self.MODEL_NAME)
 
         labels = []
         for p in msg.persons:
             # Reshape input data --->
             data = p.angle.data + p.length.data
             data = np.reshape(np.array(data), (1,16+17))
-            data = pd.DataFrame(data, columns=self.COLUMNS[:-1])
-            data = data.drop(self.DROP_LIST, axis=1)
+            data = pd.DataFrame(data, columns=col.COLUMNS[:-1])
+            data = data.drop(col.DROP_LIST, axis=1)
 
             # Predict --->
             predict = model.predict(data)
             labels.append(predict)
-            print("Detected ---> ", CHARACTER_NAME[int(predict)])
+            print("Detected ---> ", ch.CHARACTER_NAME[int(predict)])
 
             # Pose label publish --->
             label = Int32()
             label.data = predict
             self.pose_label_pub.publish(label)
 
-        return labels
+        self.labels = labels
 
 
     def dataVisualize(self, df):
         df.plot.scatter(x='L-top-1', y='Label', vmin=0, vmax=180)
         plt.show()
-            #'L-top-0','',
-            #'R-bot-0','R-bot-1','R-bot-2',
-            #'L-bot-0','L-bot-1','L-bot-2',
 
 
     def dataAugmentation(self, df):
         '''
         Replace the columns
         '''
-        copy = df.copy()
-        copy.columns = self.FLIP_COLUMNS
-        return pd.concat([df, copy], sort=True)
+        if self.IS_FLIP_ENABLE == True:
+            copy = df.copy()
+            copy.columns = col.FLIP_COLUMNS
+            return pd.concat([df, copy], sort=True)
+        else:
+            return df
 
 
-    def outputter(self):
+    def publishCharacterImage(self):
         from PIL import Image, ImageDraw, ImageFilter
 
         # Publish Image with label
@@ -285,7 +238,7 @@ class CharacterEstimatate():
         for x, y, label in zip(self.person_x, self.person_y, self.labels):
             # Draw character image --->
             os.chdir(self.PICTURE_URL)
-            char = CHARACTER_PICTURE[int(label)]
+            char = ch.CHARACTER_PICTURE[int(label)]
 
             # Load and resize
             src = pil_image.cv2pil(img)
@@ -306,44 +259,20 @@ class CharacterEstimatate():
             result.save('tmp.jpg', quality=95)
             img = cv.imread('tmp.jpg')
 
-            """
-            w, h = forward.shape[:2]
-            size = (h/2, w/2)
-            #forward = cv.resize(forward, size)
-            #forward = cv.resize(forward, (640, 480))
-
-            img[0:h, 0:w] = forward
-            """
-            """
-            forward = cv.imread( CHARACTER_PICTURE[int(label)]["filename"], -1)
-            w, h = forward.shape[:2]
-            mask = forward[:,:,3]  # アルファチャンネルだけ抜き出す。
-            mask = cv.cvtColor(mask, cv.COLOR_GRAY2BGR)  # 3色分に増やす。
-            mask = mask / 255.0  # 0-255だと使い勝手が悪いので、0.0-1.0に変更。
-
-            forward = forward[:,:,:3]  # アルファチャンネルは取り出しちゃったのでもういらない。
-
-            #img[0:h, 0:w] *= 1 - mask  # 透過率に応じて元の画像を暗くする。
-            g = forward * mask
-            g = np.array(g, dtype="u8")
-            print(type(g))
-            img[0:h, 0:w] += g  # 貼り付ける方の画像に透過率をかけて加算。
-            """
-
             # Write label name to img
-            cv.putText(img, CHARACTER_NAME[int(label)], (x-50,y), cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,150), 2, cv.LINE_AA)
+            cv.putText(img, ch.CHARACTER_NAME[int(label)], (x-50,y), cv.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,150), 2, cv.LINE_AA)
         msg = self.bridge.cv2_to_imgmsg(img, encoding="rgb8")
         self.image_pub.publish(msg)
         
+
     def train(self):
         print("Learnning --->>>")
         os.chdir(self.MODEL_URL)
 
         # 1. Load dataset --->
-        data = self.df
-        #data = self.dataAugmentation(data)
+        data = self.dataAugmentation(self.df)
         #self.dataVisualize(data)
-        data = data.drop(self.DROP_LIST, axis=1)
+        data = data.drop(col.DROP_LIST, axis=1)
         print("Dataset (Augmentation):", data)
         y = data.loc[:, 'Label']
         X = data.drop('Label', axis=1)
@@ -365,21 +294,21 @@ class CharacterEstimatate():
         licv.fit(X_train, y_train)
         self.model = licv.best_estimator_
 
-        dump(self.model, "model.pkl", compress=True) # Save
+        dump(self.model, self.MODEL_NAME, compress=True) # Save
 
-        # 3. evaluating the performance of the self.model
+        # 3. evaluating the performance of the self.model --->
         print('score_train : {}'.format(self.model.score(X_train, y_train)))
         print('score_test  : {}'.format(self.model.score(X_test, y_test)))
 
         for x, y in zip([X_train, X_test], [y_train, y_test]):
             print("-"*50)
             y_pred = self.model.predict(x)
-            print(classification_report(y, y_pred, target_names=CHARACTER_NAME))
+            print(classification_report(y, y_pred, target_names=ch.CHARACTER_NAME))
 
-        # 4. printing parameters of the model
+        # 4. printing parameters of the model --->
         print(sorted(self.model.get_params(True).items()))
          
-        # 5. printing importances of the model
+        # 5. printing importances of the model --->
         #print(self.model.feature_importances_)
         features = X_train.columns
         importances = self.model.feature_importances_

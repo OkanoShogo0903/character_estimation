@@ -2,11 +2,21 @@
 <launch>
   <arg name="mode" doc="MODE 0:CreateDataset ,1:Train ,2:Predict"/>
   <node pkg="character_estimation" name="character_estimation" type="main.py" output="screen">
-    <param name="gui" value="1" type="bool"/>
+    <!--
+        <param name="gui_enable" value="1" type="bool"/>
+    -->
+    <!-- Mode select -->
     <param name="mode" value="$(arg mode)" type="int"/>
+
+    <!-- For data augmentation -->
+    <param name="flip_enable" value="1" type="bool"/>
+
+    <!-- For data augmentation -->
     <param name="dataset_url" value="/home/demulab/pose_dataset" type="string"/>
     <param name="dataset_filename" value="dataset.csv" type="string"/>
     <param name="model_url" value="/home/demulab/catkin_ws/src/character_estimation/" type="string"/>
+
+    <!-- If you dont use `character_img` topic, no need to set it -->
     <param name="picture_url" value="/home/demulab/catkin_ws/src/character_estimation/etcs/" type="string"/>
   </node>
 
