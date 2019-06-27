@@ -85,7 +85,7 @@ class CharacterEstimatate():
 
         # Dataset load ----->>>
         try:
-            self.df = pd.read_csv( self.DATASET_FILENAME, names=col.COLUMNS)
+            self.df = pd.read_csv( self.DATASET_URL + '/' + self.DATASET_FILENAME, names=col.COLUMNS)
             rospy.loginfo("Load csv file")
         except IOError:
             self.df = pd.DataFrame( columns=col.COLUMNS)
@@ -167,6 +167,11 @@ class CharacterEstimatate():
         ''' 
         # Get data label --->
         if self.isRecording == False:
+            print("\007")
+            print("Please enter the label --->>>")
+            print("Please enter the label --->>>")
+            print("Please enter the label --->>>")
+            print("Please enter the label --->>>")
             print("Please enter the label --->>>")
             self.label = input()
             print("Recording start after some second latter")
